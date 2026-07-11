@@ -185,12 +185,9 @@ public sealed class BotBuyPatch : BasePlugin
             var copyPlayer = player;
             float rand = Random.Shared.NextSingle();
 
-            if (rand < 0.06f)
+            if (rand >= 0.06f && rand < 0.53f)
             {
-            }
-            else if (rand < 0.53f)
-            {
-                AddTimer(0.4f, () =>
+               AddTimer(2.0f, () =>
                 {
                     if (!copyPlayer.IsValid) return;
                     Swap(copyPlayer, "weapon_aug", "weapon_m4a1");
@@ -315,12 +312,12 @@ public sealed class BotBuyPatch : BasePlugin
 
                     if (roll < 0.10f)
                     {
-                        string newGun = p.Team == CsTeam.CounterTerrorist ? "weapon_scar20" : "weapon_g3sg1";
+                        string newGun = p.Team == CsTeam.CounterTerrorist ? "weapon_m4a1_silencer" : "weapon_ak47";
                         Swap(p, currentWeapon, newGun);
                     }
                     else if (roll < 0.14f)
                     {
-                        Swap(p, currentWeapon, "weapon_m249");
+                        Swap(p, currentWeapon, "weapon_awp");
                     }
                 }
             }
