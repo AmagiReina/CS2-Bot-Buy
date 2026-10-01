@@ -12,7 +12,7 @@ namespace BotBuyPatch;
 public sealed class BotBuyPatch : BasePlugin
 {
     public override string ModuleName        => "BotBuyPatch";
-    public override string ModuleVersion     => "1.0.12";
+    public override string ModuleVersion     => "1.0.14";
     public override string ModuleAuthor      => "ed0ard";
     public override string ModuleDescription => "Enable bots to take more buy options";
 
@@ -63,8 +63,8 @@ public sealed class BotBuyPatch : BasePlugin
     [GameEventHandler]
     public HookResult OnRoundStart(EventRoundStart @event, GameEventInfo info)
     {
-        // Don't Buy on Aim_Rush
-        if (Server.MapName == "aim_rush") return HookResult.Continue;
+        // Don't Buy on Aim_Rush or Rush_001
+        if (Server.MapName == "aim_rush" || Server.MapName == "rush_001") return HookResult.Continue;
 
         List<CCSPlayerController> allPlayers = new();
         List<CCSPlayerController> allCT = new();
