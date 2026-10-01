@@ -210,6 +210,7 @@ public sealed class BotBuyPatch : BasePlugin
         {
             foreach (var p in allPlayers)
             {
+                if (!p.IsValid) continue; // controller captured at round_start may be gone (bot kicked / player left)
                 var pawn = p.PlayerPawn.Value;
                 if (pawn == null || !pawn.IsValid || pawn.WeaponServices == null) continue;
 
@@ -228,6 +229,7 @@ public sealed class BotBuyPatch : BasePlugin
         {
             foreach (var p in allPlayers)
             {
+                if (!p.IsValid) continue; // controller captured at round_start may be gone (bot kicked / player left)
                 var pawn = p.PlayerPawn.Value;
                 if (pawn == null || !pawn.IsValid || pawn.WeaponServices == null) continue;
 
@@ -255,6 +257,7 @@ public sealed class BotBuyPatch : BasePlugin
             if (ConVar.Find("sv_gravity")?.GetPrimitiveValue<float>() == 230f) return;
             foreach (var p in allPlayers)
             {
+                if (!p.IsValid) continue; // controller captured at round_start may be gone (bot kicked / player left)
                 var pawn = p.PlayerPawn.Value;
                 if (pawn == null || !pawn.IsValid || pawn.WeaponServices == null) continue;
 
@@ -292,7 +295,7 @@ public sealed class BotBuyPatch : BasePlugin
             {
                 foreach (var p in allPlayers)
                 {
-                    if (p.InGameMoneyServices == null || p.InGameMoneyServices.Account < 5200)
+                    if (!p.IsValid || p.InGameMoneyServices == null || p.InGameMoneyServices.Account < 5200)
                         continue;
 
                     var pawn = p.PlayerPawn.Value;
