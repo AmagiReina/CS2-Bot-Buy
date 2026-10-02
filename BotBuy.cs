@@ -12,7 +12,7 @@ namespace BotBuyPatch;
 public sealed class BotBuyPatch : BasePlugin
 {
     public override string ModuleName        => "BotBuyPatch";
-    public override string ModuleVersion     => "1.0.12";
+    public override string ModuleVersion     => "1.0.14";
     public override string ModuleAuthor      => "ed0ard";
     public override string ModuleDescription => "Enable bots to take more buy options";
 
@@ -63,8 +63,8 @@ public sealed class BotBuyPatch : BasePlugin
     [GameEventHandler]
     public HookResult OnRoundStart(EventRoundStart @event, GameEventInfo info)
     {
-        // Don't Buy on Aim_Rush
-        if (Server.MapName == "aim_rush") return HookResult.Continue;
+        // Don't Buy on Aim_Rush or Rush_001
+        if (Server.MapName == "aim_rush" || Server.MapName == "rush_001") return HookResult.Continue;
 
         List<CCSPlayerController> allPlayers = new();
         List<CCSPlayerController> allCT = new();
@@ -207,6 +207,7 @@ public sealed class BotBuyPatch : BasePlugin
         {
             foreach (var p in allPlayers)
             {
+                if (!p.IsValid) continue; // controller captured at round_start may be gone (bot kicked / player left)
                 var pawn = p.PlayerPawn.Value;
                 if (pawn == null || !pawn.IsValid || pawn.WeaponServices == null) continue;
 
@@ -225,6 +226,7 @@ public sealed class BotBuyPatch : BasePlugin
         {
             foreach (var p in allPlayers)
             {
+                if (!p.IsValid) continue; // controller captured at round_start may be gone (bot kicked / player left)
                 var pawn = p.PlayerPawn.Value;
                 if (pawn == null || !pawn.IsValid || pawn.WeaponServices == null) continue;
 
@@ -252,6 +254,7 @@ public sealed class BotBuyPatch : BasePlugin
             if (ConVar.Find("sv_gravity")?.GetPrimitiveValue<float>() == 230f) return;
             foreach (var p in allPlayers)
             {
+                if (!p.IsValid) continue; // controller captured at round_start may be gone (bot kicked / player left)
                 var pawn = p.PlayerPawn.Value;
                 if (pawn == null || !pawn.IsValid || pawn.WeaponServices == null) continue;
 
@@ -289,7 +292,7 @@ public sealed class BotBuyPatch : BasePlugin
             {
                 foreach (var p in allPlayers)
                 {
-                    if (p.InGameMoneyServices == null || p.InGameMoneyServices.Account < 5200)
+                    if (!p.IsValid || p.InGameMoneyServices == null || p.InGameMoneyServices.Account < 5200)
                         continue;
 
                     var pawn = p.PlayerPawn.Value;
