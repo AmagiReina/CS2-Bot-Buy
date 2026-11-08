@@ -12,8 +12,8 @@ namespace BotBuyPatch;
 public sealed class BotBuyPatch : BasePlugin
 {
     public override string ModuleName        => "BotBuyPatch";
-    public override string ModuleVersion     => "1.0.14";
-    public override string ModuleAuthor      => "ed0ard";
+    public override string ModuleVersion     => "1.0.16";
+    public override string ModuleAuthor      => "ed0ard & XBribo";
     public override string ModuleDescription => "Enable bots to take more buy options";
 
     private Dictionary<int, int> _botUserIdToIndex = new();
@@ -25,6 +25,34 @@ public sealed class BotBuyPatch : BasePlugin
     private Dictionary<int, int> _prevMoney = new();
     private Dictionary<int, int> _prevArmor = new();
 //----------------------------------------------------------------------------------------------
+    [GameEventHandler]
+    public HookResult OnItemPurchase(EventItemPurchase @event, GameEventInfo info)
+    {
+        var player = @event.Userid;
+        if (player == null || !player.IsValid || !player.IsBot ||
+            player.SteamID == 0 || CoreConfig.FollowCS2ServerGuidelines)
+            return HookResult.Continue;
+
+        var weapons = player.PlayerPawn.Value?.WeaponServices?.MyWeapons;
+        if (weapons == null) return HookResult.Continue;
+
+        string weaponName = @event.Weapon.StartsWith("weapon_")
+            ? @event.Weapon : "weapon_" + @event.Weapon;
+        foreach (var handle in weapons)
+        {
+            var weapon = handle.Value;
+            if (weapon == null || !weapon.IsValid || weapon.DesignerName != weaponName) continue;
+
+            var csWeapon = weapon.As<CCSWeaponBase>();
+            // Do not claim a previously owned weapon when handling native purchases.
+            if (csWeapon.PrevOwner.IsValid || csWeapon.OriginalOwnerXuidLow != 0 ||
+                csWeapon.OriginalOwnerXuidHigh != 0) continue;
+
+            SetWeaponOriginalOwner(csWeapon, player);
+        }
+        return HookResult.Continue;
+    }
+
     [GameEventHandler]
     public HookResult OnPlayerConnectFull(EventPlayerConnectFull @event, GameEventInfo info)
     {
@@ -95,8 +123,8 @@ public sealed class BotBuyPatch : BasePlugin
         _poorPlayersByTeam[CsTeam.CounterTerrorist] = poorCT;
         _poorPlayersByTeam[CsTeam.Terrorist] = poorT;
 
-        ConVar? botLoadout = ConVar.Find("bot_loadout");
-        if (botLoadout != null && !string.IsNullOrEmpty(botLoadout.StringValue))
+        ConVar<string>? botLoadout = ConVar<string>.Find("bot_loadout");
+        if (botLoadout != null && !string.IsNullOrEmpty(botLoadout.Value))
         {
             return HookResult.Continue;
         }
@@ -251,7 +279,7 @@ public sealed class BotBuyPatch : BasePlugin
         // Swap SSG08
         AddTimer(0.4f, () =>
         {
-            if (ConVar.Find("sv_gravity")?.GetPrimitiveValue<float>() == 230f) return;
+            if (ConVar<float>.Find("sv_gravity")?.Value == 230f) return;
             foreach (var p in allPlayers)
             {
                 if (!p.IsValid) continue; // controller captured at round_start may be gone (bot kicked / player left)
@@ -502,7 +530,10 @@ public sealed class BotBuyPatch : BasePlugin
                             string gun = team == CsTeam.CounterTerrorist
                                 ? (Random.Shared.Next(2) == 0 ? "weapon_m4a1_silencer" : "weapon_m4a1")
                                 : "weapon_ak47";
-                            poorPlayer.GiveNamedItem(gun);
+                            var weapon = poorPlayer.GiveNamedItem<CCSWeaponBase>(gun);
+                            if (weapon == null || !weapon.IsValid) continue;
+
+                            SetWeaponOriginalOwner(weapon, rich);
                             giftedPoor.Add(poorPlayer);
 
                             rich.InGameMoneyServices.Account -= price;
@@ -565,14 +596,14 @@ public sealed class BotBuyPatch : BasePlugin
     [GameEventHandler]
     public HookResult OnRoundFreezeEnd(EventRoundFreezeEnd @event, GameEventInfo info)
     {
-        ConVar? botLoadout = ConVar.Find("bot_loadout");
-        if (botLoadout != null && !string.IsNullOrEmpty(botLoadout.StringValue))
+        ConVar<string>? botLoadout = ConVar<string>.Find("bot_loadout");
+        if (botLoadout != null && !string.IsNullOrEmpty(botLoadout.Value))
         {
             return HookResult.Continue;
         }
 
         // Don't save money in the last round of each half
-        var ecoLimitCvar = ConVar.Find("bot_eco_limit");
+        var ecoLimitCvar = ConVar<int>.Find("bot_eco_limit");
         if (ecoLimitCvar != null)
         {
             if (IsSecondToLastRoundOfHalf())
@@ -635,6 +666,17 @@ public sealed class BotBuyPatch : BasePlugin
     }
 
 //----------------------------------------------------------------------------------------------
+    private static void SetWeaponOriginalOwner(CCSWeaponBase weapon, CCSPlayerController owner)
+    {
+        ulong ownerId = owner.SteamID;
+        if (ownerId == 0 || CoreConfig.FollowCS2ServerGuidelines) return;
+
+        weapon.OriginalOwnerXuidLow = (uint)ownerId;
+        weapon.OriginalOwnerXuidHigh = (uint)(ownerId >> 32);
+        Utilities.SetStateChanged(weapon, "CEconEntity", "m_OriginalOwnerXuidLow");
+        Utilities.SetStateChanged(weapon, "CEconEntity", "m_OriginalOwnerXuidHigh");
+    }
+
     private bool Buy(CCSPlayerController player, string itemName)
     {
         if (!player.IsValid || !player.IsBot || player.InGameMoneyServices == null)
@@ -708,7 +750,16 @@ public sealed class BotBuyPatch : BasePlugin
         if (money < price)
             return false;
 
-        player.GiveNamedItem(itemName);
+        if (itemName.StartsWith("weapon_"))
+        {
+            var weapon = player.GiveNamedItem<CCSWeaponBase>(itemName);
+            if (weapon == null || !weapon.IsValid) return false;
+            SetWeaponOriginalOwner(weapon, player);
+        }
+        else
+        {
+            player.GiveNamedItem(itemName);
+        }
 
         player.InGameMoneyServices.Account -= price;
         Utilities.SetStateChanged(player, "CCSPlayerController", "m_pInGameMoneyServices");
@@ -813,7 +864,7 @@ public sealed class BotBuyPatch : BasePlugin
 
         player.InGameMoneyServices.Account += price;
         // Cap at mp_maxmoney
-        int maxMoney = ConVar.Find("mp_maxmoney")?.GetPrimitiveValue<int>() ?? 16000;
+        int maxMoney = ConVar<int>.Find("mp_maxmoney")?.Value ?? 16000;
         if (player.InGameMoneyServices.Account > maxMoney)
             player.InGameMoneyServices.Account = maxMoney;
         Utilities.SetStateChanged(player, "CCSPlayerController", "m_pInGameMoneyServices");
@@ -866,8 +917,8 @@ public sealed class BotBuyPatch : BasePlugin
                 return false;
 
             int played = gameRules.TotalRoundsPlayed;
-            int maxRounds = ConVar.Find("mp_maxrounds")?.GetPrimitiveValue<int>() ?? 24;
-            int otMaxRounds = ConVar.Find("mp_overtime_maxrounds")?.GetPrimitiveValue<int>() ?? 6;
+            int maxRounds = ConVar<int>.Find("mp_maxrounds")?.Value ?? 24;
+            int otMaxRounds = ConVar<int>.Find("mp_overtime_maxrounds")?.Value ?? 6;
 
             if (maxRounds <= 0) maxRounds = 24;
             if (otMaxRounds <= 0) otMaxRounds = 6;
@@ -898,7 +949,7 @@ public sealed class BotBuyPatch : BasePlugin
                 return false;
 
             int played = gameRules.TotalRoundsPlayed;
-            int maxRounds = ConVar.Find("mp_maxrounds")?.GetPrimitiveValue<int>() ?? 24;
+            int maxRounds = ConVar<int>.Find("mp_maxrounds")?.Value ?? 24;
             if (maxRounds <= 0) maxRounds = 24;
             int half = maxRounds / 2;
 
